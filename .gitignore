@@ -1,3 +1,6 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# The original ppm images
+data/ppm/*
