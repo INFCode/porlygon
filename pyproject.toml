@@ -12,7 +12,11 @@ torchvision = "^0.13.1"
 gym = "^0.26.2"
 scikit-image = "^0.19.3"
 torchmetrics = "^0.10.0"
+# Pygame is required if you want to render the gym environment.
+pygame = {version = "^2.1.2", optional = true} 
 
+[tool.poetry.extras]
+render = ["pygame"]
 
 [build-system]
 requires = ["poetry-core"]
