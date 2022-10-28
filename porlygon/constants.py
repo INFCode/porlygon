@@ -7,4 +7,4 @@ VERTICES_PER_POLYGON = 4
 IMG_SHAPE = (3, 128, 128)
 
 # the window size for rendering for 'human' in the environment
-WINDOW_SIZE = (600, 400)
+WINDOW_SIZE = (2400, 1600)

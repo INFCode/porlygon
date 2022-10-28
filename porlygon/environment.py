@@ -11,8 +11,8 @@ from torch.utils.data import Dataset
 from torchvision.io import read_image
 from torchmetrics.functional import structural_similarity_index_measure
 
-from constants import VERTICES_PER_POLYGON, WINDOW_SIZE
-from errors import MissingDependency
+from .constants import VERTICES_PER_POLYGON, WINDOW_SIZE
+from .errors import MissingDependency
 
 try:
     import pygame
@@ -28,7 +28,7 @@ class DrawPolygonEnv(gym.Env):
     Custom Environment that follows gym interface.
     This is a simple env where the agent must learn to go always left. 
     """
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps" : 60}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps" : 20}
 
     def __init__(self, image_shape, image_path, max_step, render_mode=None):
         super(DrawPolygonEnv, self).__init__()
@@ -36,6 +36,9 @@ class DrawPolygonEnv(gym.Env):
         self.img_shape = image_shape
         self.img_path = image_path
         self.max_step = max_step
+        self.screen = None
+        self.clock = None
+        self.font = None
 
         if render_mode == 'none':
             render_mode = None
@@ -45,10 +48,10 @@ class DrawPolygonEnv(gym.Env):
                 raise MissingDependency(
                     f"{PYGAME_IMPORT_ERROR}. Package pygame is required to render the environment, run `pip install porlygon[render]` to install it"
                 )
-            if render_mode not in self.metadata['render.modes']:
+            if render_mode not in self.metadata['render_modes']:
                 # Want to render environment with unsupported render modes
                 raise NotImplementedError(
-                    f"Only {self.metadata['render.modes']} are supported render modes, but {render_mode} is provided")
+                    f"Only {self.metadata['render_modes']} are supported render modes, but {render_mode} is provided")
 
         self.render_mode = render_mode
         # Define action and observation space
@@ -65,9 +68,9 @@ class DrawPolygonEnv(gym.Env):
         super().reset(seed=seed)
         # randomly select an image as reference
         self._ref_img = self.dataset[self.np_random.integers(
-            len(self.dataset))]
+            len(self.dataset))].numpy()
         # reset the canvas as a white empty one
-        self._canvas = torch.full(self.img_shape, 255)
+        self._canvas = np.full(self.img_shape, 255, dtype=np.uint8)
         # restart from 0th step
         self._step_cnt = 0
         return self._get_obs()
@@ -77,14 +80,16 @@ class DrawPolygonEnv(gym.Env):
         vertices = action[:-4].reshape(2, -1)
         rgb = np.round(action[-4:-1] * 255).astype(int)
         alpha = action[-1]
-        rr, cc = skdraw.polygon(vertices[1:], vertices[2:])
+        rr, cc = skdraw.polygon(vertices[0,] * self.img_shape[1], vertices[1,] * self.img_shape[2])
         # alpha blending: new_color = (alpha)*(foreground_color) + (1 - alpha)*(background_color)
         # see https://graphics.fandom.com/wiki/Alpha_blending
-        self._canvas[:, rr, cc] *= 1 - alpha
-        self._canvas[:, rr, cc] += rgb * alpha
+
+        self._canvas[:, rr, cc] = (self._canvas[:, rr, cc] * (1 - alpha) + np.expand_dims(rgb * alpha, 1)).astype(int)
         # Calculate reward
         reward = structural_similarity_index_measure(
-            self._canvas, self._ref_img, data_range=255)
+            torch.from_numpy(self._canvas).unsqueeze(0).to(torch.float),
+            torch.from_numpy(self._ref_img).unsqueeze(0).to(torch.float),
+            data_range=255)
         # Is max step reached?
         self._step_cnt += 1
         done = (self._step_cnt == self.max_step)
@@ -102,25 +107,29 @@ class DrawPolygonEnv(gym.Env):
         if self.clock is None:
             self.clock = pygame.time.Clock()
         if self.font is None:
-            self.font = freetype.SysFont(freetype.get_default_font(), 18)
-      
+            font_size = 30
+            self.font = freetype.SysFont("monospace", font_size)
+            self.text_area_height = self.font.get_sized_height(font_size) * 1.5
+            self.info_bg_surf = pygame.Surface((WINDOW_SIZE[0], self.text_area_height))
+        
         step_cnt_text = f"step: {self._step_cnt}"
-        info_surf, info_rect= self.font.render(step_cnt_text, (220,0,0))
-        self.screen.blit(info_surf, (0,0))
-        text_height = info_rect.height * 1.2
+        info_surf, _= self.font.render(step_cnt_text, (220,0,0), pygame.SRCALPHA)
 
         # Images should both fit in the window.
-        image_top = text_height
+        image_top = self.text_area_height
         image_mid = WINDOW_SIZE[0] / 2
-        image_size = min(image_mid, WINDOW_SIZE[1] - text_height)
+        image_size = min(image_mid, WINDOW_SIZE[1] - self.text_area_height)
+
+        canvas_surf = pygame.surfarray.make_surface(np.transpose(self._canvas, (2, 1, 0)))
+        canvas_surf = pygame.transform.scale(canvas_surf, (image_size, image_size))
         if self._step_cnt == 0:
-            ref_surf = pygame.surfarray.make_surface(self._ref_img.numpy())
+            ref_surf = pygame.surfarray.make_surface(np.transpose(self._ref_img, (2, 1, 0)))
             ref_surf = pygame.transform.scale(ref_surf, (image_size, image_size))
             self.screen.blit(ref_surf, (0, image_top))
-
-        canvas_surf = pygame.surfarray.make_surface(self._canvas.numpy())
-        canvas_surf = pygame.transform.scale(canvas_surf, (image_size, image_size))
         self.screen.blit(canvas_surf, (image_mid, image_top))
+        self.info_bg_surf.fill((0,0,0))
+        self.info_bg_surf.blit(info_surf, (0,0))
+        self.screen.blit(self.info_bg_surf, (0,0))
 
         if self.render_mode == "human":
             pygame.event.pump()
@@ -138,14 +147,14 @@ class DrawPolygonEnv(gym.Env):
             pygame.quit()
 
     def _get_obs(self):
-        return torch.stack([self._ref_img, self._canvas], dim=-1)
+        return np.stack((self._ref_img, self._canvas), axis=-1)
 
     def _get_info(self):
         return {"step": self._step_cnt}
 
     def _load_dataset(self):
         transforms = tsfm.Compose(
-            [tsfm.Resize(self.img_shape), tsfm.ToTensor()])
+                [tsfm.Resize(self.img_shape[1:])])
         return EnvironmentDataset(img_dir=self.img_path, transforms=transforms)
 
 
@@ -155,7 +164,7 @@ class EnvironmentDataset(Dataset):
         self.transforms = transforms
         self.img_files = glob.glob(os.path.join(self.dir, '*.jpg'))
 
-    def __getitem__(self, idx) -> torch.Tensor:
+    def __getitem__(self, idx):
         image = read_image(self.img_files[idx])
         if self.transforms:
             image = self.transforms(image)
