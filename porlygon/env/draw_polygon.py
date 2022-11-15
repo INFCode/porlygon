@@ -1,4 +1,3 @@
-from gym.spaces import text
 import numpy as np
 import skimage.draw as skdraw
 import glob
@@ -11,8 +10,8 @@ from torch.utils.data import Dataset
 from torchvision.io import read_image
 from torchmetrics.functional import structural_similarity_index_measure
 
-from .constants import VERTICES_PER_POLYGON, WINDOW_SIZE
-from .errors import MissingDependency
+from ..constants import VERTICES_PER_POLYGON, WINDOW_SIZE, IMG_SHAPE
+from ..errors import MissingDependency
 
 try:
     import pygame
@@ -30,7 +29,7 @@ class DrawPolygonEnv(gym.Env):
     """
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps" : 20}
 
-    def __init__(self, image_shape, image_path, max_step, render_mode=None):
+    def __init__(self, image_shape = IMG_SHAPE, image_path = "data/jpg/", max_step=100, render_mode=None):
         super(DrawPolygonEnv, self).__init__()
 
         self.img_shape = image_shape
@@ -64,8 +63,11 @@ class DrawPolygonEnv(gym.Env):
                                             shape=self.img_shape + (2,), dtype=np.uint8)
         self.dataset = self._load_dataset()
 
-    def reset(self, seed = None):
+    def reset(self, seed = None, options = None):
+        # let gym.Env to handle the seeding
         super().reset(seed=seed)
+        # options is not used here
+        del options
         # randomly select an image as reference
         self._ref_img = self.dataset[self.np_random.integers(
             len(self.dataset))].numpy()
@@ -73,7 +75,7 @@ class DrawPolygonEnv(gym.Env):
         self._canvas = np.full(self.img_shape, 255, dtype=np.uint8)
         # restart from 0th step
         self._step_cnt = 0
-        return self._get_obs()
+        return (self._get_obs(), self._get_info())
 
     def step(self, action: np.ndarray):
         # apply action
@@ -90,11 +92,15 @@ class DrawPolygonEnv(gym.Env):
             torch.from_numpy(self._canvas).unsqueeze(0).to(torch.float),
             torch.from_numpy(self._ref_img).unsqueeze(0).to(torch.float),
             data_range=255)
-        # Is max step reached?
+        # There should not be a second return value
+        assert(isinstance(reward, torch.Tensor))
+        reward = reward.item()
+        # Is max step reached? Terminate if so.
         self._step_cnt += 1
-        done = (self._step_cnt == self.max_step)
-        # Optionally we can pass additional info, we are not using that for now
-        return self._get_obs(), reward, done, self._get_info()
+        term = (self._step_cnt == self.max_step)
+        # This environment should never be truncated
+        trunc = False
+        return self._get_obs(), reward, term, trunc, self._get_info()
 
     def render(self):
         if self.screen is None:

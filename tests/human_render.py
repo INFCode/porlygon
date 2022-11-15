@@ -1,15 +1,15 @@
-import porlygon.environment as E
-from porlygon.constants import IMG_SHAPE
+import gym
 
 if __name__ == "__main__":
-    env = E.DrawPolygonEnv(IMG_SHAPE, "data/jpg/", 100, render_mode='human')
-    env.reset(seed = 114514)
+    env = gym.make("DrawPolygon-v0", render_mode = "human")
+    env.reset(seed = 42)
     
     action_space = env.action_space
     for i in range(100):
-        done = False
-        while not done:
+        term = False
+        trunc = False
+        while not term and not trunc:
             env.render()
-            obs, reward, done, info =  env.step(action_space.sample())
+            obs, reward, term, trunc, info =  env.step(action_space.sample())
         env.render()
         env.reset()
