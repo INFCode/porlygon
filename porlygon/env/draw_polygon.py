@@ -59,8 +59,8 @@ class DrawPolygonEnv(gym.Env):
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(
             input_size, ), dtype=np.float32)
         # Two images for the reference image and the canvas
-        self.observation_space = spaces.Box(low=0, high=255,
-                                            shape=self.img_shape + (2,), dtype=np.uint8)
+        self.observation_space = spaces.Dict({"reference": spaces.Box(low=0, high=255, shape=self.img_shape, dtype=np.uint8), 
+                                              "canvas": spaces.Box(low=0, high=255, shape=self.img_shape, dtype=np.uint8)})
         self.dataset = self._load_dataset()
 
     def reset(self, seed = None, options = None):
@@ -153,7 +153,7 @@ class DrawPolygonEnv(gym.Env):
             pygame.quit()
 
     def _get_obs(self):
-        return np.stack((self._ref_img, self._canvas), axis=-1)
+        return {"reference": self._ref_img, "canvas": self._canvas}
 
     def _get_info(self):
         return {"step": self._step_cnt}
