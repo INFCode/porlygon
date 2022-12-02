@@ -1,6 +1,6 @@
 from timeit import timeit 
 import gym
-import porlygon
+import porlygon.env
 
 env = gym.make("DrawPolygon-v0", render_mode = "human")
 env.reset(seed = 42)
