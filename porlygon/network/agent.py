@@ -53,6 +53,13 @@ def get_args():
     return args
 
 
+def make_actor(state_shape, action_shape, hidden_sizes, max_action, lr, device):
+    net = Net(state_shape, hidden_sizes=hidden_sizes, device=device)
+    actor = Actor(net, action_shape, max_action=max_action, device=device).to(device)
+    actor_optim = torch.optim.Adam(actor.parameters(), lr=lr)
+    return actor, actor_optim
+
+
 def make_critic(state_shape, action_shape, hidden_sizes, lr, device):
     net = Net(
         state_shape, action_shape, hidden_sizes=hidden_sizes, concat=True, device=device
@@ -89,11 +96,14 @@ def test_td3(args=get_args()):
     train_envs.seed(args.seed)
     test_envs.seed(args.seed)
     # model
-    net = Net(args.state_shape, hidden_sizes=args.hidden_sizes, device=args.device)
-    actor = Actor(
-        net, args.action_shape, max_action=args.max_action, device=args.device
-    ).to(args.device)
-    actor_optim = torch.optim.Adam(actor.parameters(), lr=args.actor_lr)
+    actor, actor_optim = make_actor(
+        args.state_shape,
+        args.action_shape,
+        args.hidden_sizes,
+        args.max_action,
+        args.critic_lr,
+        args.device,
+    )
 
     critic1, critic1_optim = make_critic(
         args.state_shape,
