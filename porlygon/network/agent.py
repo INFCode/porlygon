@@ -19,6 +19,8 @@ from tianshou.utils.net.continuous import Actor, Critic
 
 import porlygon.env
 
+from td3_network import ConvNet
+
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -53,14 +55,16 @@ def get_args():
     return args
 
 
-def make_actor(state_shape, action_shape, hidden_sizes, max_action, lr, device):
-    net = Net(state_shape, hidden_sizes=hidden_sizes, device=device)
+def make_actor(state_shape, action_shape, hidden_channels, max_action, lr, device):
+    # TODO: replace the Net with custom network
+    net = ConvNet(state_shape, action_shape, hidden_channels=hidden_channels)
     actor = Actor(net, action_shape, max_action=max_action, device=device).to(device)
     actor_optim = torch.optim.Adam(actor.parameters(), lr=lr)
     return actor, actor_optim
 
 
 def make_critic(state_shape, action_shape, hidden_sizes, lr, device):
+    # TODO: replace the Net with custom network
     net = Net(
         state_shape, action_shape, hidden_sizes=hidden_sizes, concat=True, device=device
     )
@@ -75,8 +79,6 @@ def test_td3(args=get_args()):
     # TD3 only work on continuous action space
     assert isinstance(env.action_space, spaces.Box)
     args.state_shape = env.observation_space.shape
-    # State shape is required
-    assert args.state_shape is not None
     args.action_shape = env.action_space.shape
     args.max_action = env.action_space.high[0]
     if args.reward_threshold is None:
