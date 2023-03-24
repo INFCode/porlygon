@@ -1,4 +1,5 @@
 import torch
+from torchvision.io import decode_image
 from torchvision.ops import MLP
 import numpy as np
 import torch.nn as nn
@@ -15,6 +16,7 @@ class ObsPreprocessNet(nn.Module):
         hidden_channels=[32, 64, 64],
         use_batchnorm=True,
         use_dropout=True,
+        device="cpu",
     ):
         super(ObsPreprocessNet, self).__init__()
         input_channel = (
@@ -39,6 +41,7 @@ class ObsPreprocessNet(nn.Module):
             in_features=hidden_channels[-1] * final_layer_size,
             out_features=intermed_rep_size,
         )
+        self.device = device
 
     def conv_layer(self, in_channels, out_channels, use_batchnorm, use_dropout):
         """Helper function for creating a convolutional layer with batch normalization, ReLU activation, and dropout"""
@@ -61,7 +64,10 @@ class ObsPreprocessNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, obs, state=None, info={}):
-        obs_list = [torch.from_numpy(arr).float() for arr in obs.values()]
+        obs_list = [
+            torch.from_numpy(arr).float().to(dtype=torch.float32, device=self.device)
+            for arr in obs.values()
+        ]
         x = torch.cat(obs_list, 1)
         # Apply convolutional layers one by one
         for conv in self.convs:
@@ -83,6 +89,7 @@ class ActPreprocessNet(nn.Module):
         hidden_features=[32, 64, 64],
         use_batchnorm=True,
         use_dropout=True,
+        device="cpu",
     ):
         super(ActPreprocessNet, self).__init__()
         input_features = single_act_shape[0]
@@ -95,29 +102,32 @@ class ActPreprocessNet(nn.Module):
             bias=not use_batchnorm,
             dropout=dropout_rate,
         )
+        self.device = device
 
     def forward(self, act, state=None, info={}):
+        act = torch.as_tensor(act, dtype=torch.float32, device=self.device)
         return self.net(act), state
 
 
 class ActorNet(nn.Module):
-    """Simple actor network. Will create an actor operated in continuous \
+    """
+    Simple actor network. Will create an actor operated in continuous
     action space with structure of preprocess_net ---> action_shape.
     """
 
     def __init__(
         self,
         preprocess_net: nn.Module,
-        preprocess_net_output_dim,
+        preprocess_net_output_dim: int,
         action_shape,
-        hidden_sizes=[],
+        hidden_sizes=[8, 16],
         max_action: float = 1.0,
     ):
         super().__init__()
         self.preprocess = preprocess_net
         output_dim = int(np.prod(action_shape))
         input_dim = preprocess_net_output_dim
-        self.last = MLP(
+        self.final_mlp = MLP(
             input_dim, hidden_sizes + [output_dim], nn.BatchNorm1d, bias=False
         )
         self._max = max_action
@@ -130,7 +140,7 @@ class ActorNet(nn.Module):
     ):
         """Mapping: obs -> logits -> action."""
         logits, hidden = self.preprocess(obs, state)
-        logits = self._max * torch.tanh(self.last(logits))
+        logits = self._max * torch.tanh(self.final_mlp(logits))
         return logits, hidden
 
 
@@ -141,35 +151,66 @@ class CriticNet(nn.Module):
         act_preprocess_net_output_dim,
         obs_preprocess_net: nn.Module,
         obs_preprocess_net_output_dim,
-        device="cpu",
         hidden_sizes=[],
+        device="cpu",
     ):
         super().__init__()
-        self.device = (device,)
+        self.device = device
         self.act_preprocess = act_preprocess_net
         self.obs_preprocess = obs_preprocess_net
         input_dim = act_preprocess_net_output_dim + obs_preprocess_net_output_dim
         output_dim = 1
-        self.last = MLP(input_dim, hidden_sizes + [output_dim])
+        self.final_mlp = MLP(input_dim, hidden_sizes + [output_dim])
 
     def forward(
         self,
-        s,
-        a,
+        obs,
+        act,
         info={},
     ):
         """Mapping: (s, a) -> logits -> Q(s, a)."""
-        s = torch.as_tensor(s, device=self.device, dtype=torch.float32)  # type: ignore
-        a = torch.as_tensor(a, device=self.device, dtype=torch.float32)  # type: ignore
-        s_intermed = self.obs_preprocess(s)
-        a_intermed = self.act_preprocess(a)
+        s_intermed, _ = self.obs_preprocess(obs)
+        a_intermed, _ = self.act_preprocess(act)
         logits = torch.cat([s_intermed, a_intermed], dim=1)
-        logits = self.last(logits)
+        logits = self.final_mlp(logits)
         return logits
 
 
 if __name__ == "__main__":
-    from torchinfo import summary
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    print(f"{device=}")
 
-    n = ObsPreprocessNet(single_obs_shape=(3, 128, 128), intermed_rep_size=12)
-    summary(n, (16, 6, 128, 128))
+    obs_shape = (3, 128, 128)
+    obs_intermed = 64
+
+    act_shape = (12,)
+    act_intermed = 16
+
+    obs_pre = ObsPreprocessNet(
+        single_obs_shape=obs_shape, intermed_rep_size=obs_intermed, device=device
+    ).to(device)
+    act_pre = ActPreprocessNet(
+        single_act_shape=act_shape, intermed_rep_size=act_intermed, device=device
+    ).to(device)
+
+    actor = ActorNet(
+        obs_pre, preprocess_net_output_dim=obs_intermed, action_shape=act_shape
+    ).to(device)
+    critic = CriticNet(
+        act_preprocess_net=act_pre,
+        act_preprocess_net_output_dim=act_intermed,
+        obs_preprocess_net=obs_pre,
+        obs_preprocess_net_output_dim=obs_intermed,
+        device=device,
+    ).to(device)
+
+    obs = {
+        "reference": np.random.rand(16, 3, 128, 128),
+        "canvas": np.random.rand(16, 3, 128, 128),
+    }
+
+    action, _ = actor.forward(obs)
+    Q_logit = critic.forward(obs, action)
+
+    print(f"{action.size()=}")
+    print(f"{Q_logit.size()=}")
