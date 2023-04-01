@@ -19,7 +19,8 @@ from tianshou.utils.net.continuous import Actor, Critic
 
 import porlygon.env
 
-from td3_network import ConvNet
+# from td3_network import ConvNet
+from td3_network import ObsPreprocessNet, ActPreprocessNet, ActorNet, CriticNet
 
 
 def get_args():
@@ -41,9 +42,18 @@ def get_args():
     parser.add_argument("--step-per-collect", type=int, default=8)
     parser.add_argument("--update-per-step", type=float, default=0.125)
     parser.add_argument("--batch-size", type=int, default=128)
-    parser.add_argument("--hidden-sizes", type=int, nargs="*", default=[128, 128])
+    parser.add_argument(
+        "--action-hidden-sizes", type=int, nargs="*", default=[32, 64, 64]
+    )
+    parser.add_argument(
+        "--observation-hidden-sizes", type=int, nargs="*", default=[64, 32, 16]
+    )
+    parser.add_argument("--actor-hidden-sizes", type=int, nargs="*", default=[16, 32])
+    parser.add_argument("--critic-hidden-sizes", type=int, nargs="*", default=[16, 32])
+    parser.add_argument("--act-intermediate-size", type=int, default=32)
+    parser.add_argument("--obs-intermediate-size", type=int, default=1024)
     parser.add_argument("--training-num", type=int, default=8)
-    parser.add_argument("--test-num", type=int, default=100)
+    parser.add_argument("--test-num", type=int, default=20)
     parser.add_argument("--logdir", type=str, default="log")
     parser.add_argument("--render", type=float, default=0.0)
     parser.add_argument("--rew-norm", action="store_true", default=False)
@@ -55,36 +65,84 @@ def get_args():
     return args
 
 
-def make_actor(state_shape, action_shape, hidden_channels, max_action, lr, device):
-    # TODO: replace the Net with custom network
-    net = ConvNet(state_shape, action_shape, hidden_channels=hidden_channels)
-    actor = Actor(net, action_shape, max_action=max_action, device=device).to(device)
+def make_preprocessor(
+    state_shape,
+    obs_intermed_size,
+    obs_hidden_channels,
+    action_shape,
+    act_intermed_size,
+    act_hidden_channels,
+    device,
+):
+    obs_preprocess = ObsPreprocessNet(
+        state_shape, obs_intermed_size, obs_hidden_channels, device=device
+    ).to(device)
+    act_preprocess = ActPreprocessNet(
+        action_shape, act_intermed_size, act_hidden_channels, device=device
+    ).to(device)
+    return obs_preprocess, act_preprocess
+
+
+def make_actor(
+    obs_preprocess,
+    action_shape,
+    intermed_rep_size,
+    hidden_channels,
+    max_action,
+    lr,
+    device,
+):
+    # net = ConvNet(state_shape, action_shape, hidden_channels=hidden_channels)
+    # actor = Actor(net, action_shape, max_action=max_action, device=device).to(device)
+    actor = ActorNet(
+        obs_preprocess, intermed_rep_size, action_shape, hidden_channels, max_action
+    ).to(device)
     actor_optim = torch.optim.Adam(actor.parameters(), lr=lr)
     return actor, actor_optim
 
 
-def make_critic(state_shape, action_shape, hidden_sizes, lr, device):
+def make_critic(
+    act_preprocess,
+    act_intermed_size,
+    obs_preprocess,
+    obs_intermed_size,
+    hidden_channels,
+    lr,
+    device,
+):
     # TODO: replace the Net with custom network
-    net = Net(
-        state_shape, action_shape, hidden_sizes=hidden_sizes, concat=True, device=device
-    )
-    critic = Critic(net, device=device).to(device)
+    # net = Net(
+    #    state_shape, action_shape, hidden_sizes=hidden_sizes, concat=True, device=device
+    # )
+    # critic = Critic(net, device=device).to(device)
+    critic = CriticNet(
+        act_preprocess,
+        act_intermed_size,
+        obs_preprocess,
+        obs_intermed_size,
+        hidden_sizes=hidden_channels,
+        device=device,
+    ).to(device)
     critic_optim = torch.optim.Adam(critic.parameters(), lr=lr)
     return critic, critic_optim
 
 
 def test_td3(args=get_args()):
+    print("Setting variables...")
     task = "DrawPolygon-v0"
     env = gym.make(task)
     # TD3 only work on continuous action space
     assert isinstance(env.action_space, spaces.Box)
-    args.state_shape = env.observation_space.shape
+    assert isinstance(env.observation_space, spaces.Dict)
+    args.state_shape = env.observation_space["reference"].shape
     args.action_shape = env.action_space.shape
     args.max_action = env.action_space.high[0]
     if args.reward_threshold is None:
         args.reward_threshold = env.spec.reward_threshold
     # you can also use tianshou.env.SubprocVectorEnv
     # train_envs = gym.make(args.task)
+
+    print("Building Environments...")
     train_envs = DummyVectorEnv(
         [lambda: gym.make(args.task) for _ in range(args.training_num)]
     )
@@ -92,36 +150,68 @@ def test_td3(args=get_args()):
     test_envs = DummyVectorEnv(
         [lambda: gym.make(args.task) for _ in range(args.test_num)]
     )
+
     # seed
+    print("Setting seeds...")
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     train_envs.seed(args.seed)
     test_envs.seed(args.seed)
+
     # model
-    actor, actor_optim = make_actor(
+    print("Building network...")
+    observation_preprocess, action_preprocess = make_preprocessor(
         args.state_shape,
+        args.obs_intermediate_size,
+        args.observation_hidden_sizes,
         args.action_shape,
-        args.hidden_sizes,
+        args.act_intermediate_size,
+        args.action_hidden_sizes,
+        args.device,
+    )
+
+    actor, actor_optim = make_actor(
+        observation_preprocess,
+        args.action_shape,
+        args.obs_intermediate_size,
+        args.actor_hidden_sizes,
         args.max_action,
-        args.critic_lr,
+        args.actor_lr,
         args.device,
     )
 
     critic1, critic1_optim = make_critic(
-        args.state_shape,
-        args.action_shape,
-        args.hidden_sizes,
+        action_preprocess,
+        args.act_intermediate_size,
+        observation_preprocess,
+        args.obs_intermediate_size,
+        args.critic_hidden_sizes,
         args.critic_lr,
         args.device,
     )
 
     critic2, critic2_optim = make_critic(
-        args.state_shape,
-        args.action_shape,
-        args.hidden_sizes,
+        action_preprocess,
+        args.act_intermediate_size,
+        observation_preprocess,
+        args.obs_intermediate_size,
+        args.critic_hidden_sizes,
         args.critic_lr,
         args.device,
     )
+
+    # test if it can inference correctly
+    print("Testing network on fake inputs...")
+    obs = {
+        "reference": np.random.rand(args.batch_size, *args.state_shape),
+        "canvas": np.random.rand(args.batch_size, *args.state_shape),
+    }
+
+    action, _ = actor.forward(obs)
+    Q_logit = critic1.forward(obs, action)
+
+    assert action.size() == (args.batch_size, int(np.prod(args.action_shape)))
+    assert Q_logit.size() == (args.batch_size, 1)
 
     policy = TD3Policy(
         actor,

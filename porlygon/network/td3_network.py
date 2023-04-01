@@ -65,10 +65,10 @@ class ObsPreprocessNet(nn.Module):
 
     def forward(self, obs, state=None, info={}):
         obs_list = [
-            torch.from_numpy(arr).float().to(dtype=torch.float32, device=self.device)
+            torch.from_numpy(arr).float().to(dtype=torch.float32)
             for arr in obs.values()
         ]
-        x = torch.cat(obs_list, 1)
+        x = torch.cat(obs_list, 1).to(self.device)
         # Apply convolutional layers one by one
         for conv in self.convs:
             x = conv(x)
@@ -92,7 +92,7 @@ class ActPreprocessNet(nn.Module):
         device="cpu",
     ):
         super(ActPreprocessNet, self).__init__()
-        input_features = single_act_shape[0]
+        input_features = int(np.prod(single_act_shape))
         norm = nn.BatchNorm1d if use_batchnorm else None
         dropout_rate = 0.5 if use_dropout else 0.0
         self.net = MLP(
@@ -120,7 +120,7 @@ class ActorNet(nn.Module):
         preprocess_net: nn.Module,
         preprocess_net_output_dim: int,
         action_shape,
-        hidden_sizes=[8, 16],
+        hidden_sizes=[16, 32],
         max_action: float = 1.0,
     ):
         super().__init__()
@@ -151,7 +151,7 @@ class CriticNet(nn.Module):
         act_preprocess_net_output_dim,
         obs_preprocess_net: nn.Module,
         obs_preprocess_net_output_dim,
-        hidden_sizes=[],
+        hidden_sizes=[16, 32],
         device="cpu",
     ):
         super().__init__()
