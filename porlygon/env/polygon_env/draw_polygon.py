@@ -28,7 +28,7 @@ class DrawPolygonEnv(gym.Env):
     This is a simple env where the agent must learn to go always left.
     """
 
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 20}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
 
     def __init__(
         self,
