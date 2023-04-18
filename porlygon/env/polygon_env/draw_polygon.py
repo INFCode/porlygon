@@ -24,8 +24,18 @@ else:
 
 class DrawPolygonEnv(gym.Env):
     """
-    Custom Environment that follows gym interface.
-    This is a simple env where the agent must learn to go always left.
+    A custom OpenAI Gym environment where an agent must learn to draw polygons on a canvas to match a reference image.
+
+    Args:
+        image_shape (tuple): The shape of the input images (default: IMG_SHAPE).
+        image_path (str): The path to the directory containing the input images (default: "data/jpg/").
+        max_step (int): The maximum number of steps allowed in each episode (default: 100).
+        render_mode (str): The rendering mode. Can be "human" or "rgb_array" (default: None).
+
+    Attributes:
+        action_space (gym.spaces.Box): The action space for the environment.
+        observation_space (gym.spaces.Dict): The observation space for the environment.
+        metadata (dict): Additional metadata for the environment.
     """
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
@@ -81,6 +91,16 @@ class DrawPolygonEnv(gym.Env):
         self.dataset = self._load_dataset()
 
     def reset(self, seed=None, options=None):
+        """
+        Resets the environment to its initial state.
+        
+        Args:
+            seed (int): The random seed used to generate the random state (default: None).
+            options (dict): Additional options (not used in this function).
+            
+        Returns:
+            tuple: A tuple containing the initial observation and information.
+        """
         # let gym.Env to handle the seeding
         super().reset(seed=seed)
         # options is not used here
@@ -94,6 +114,15 @@ class DrawPolygonEnv(gym.Env):
         return (self._get_obs(), self._get_info())
 
     def step(self, action: np.ndarray):
+        """
+        Executes one step in the environment.
+        
+        Args:
+            action (np.ndarray): The action to take.
+            
+        Returns:
+            tuple: A tuple containing the new observation, the reward, the termination status, the truncation status, and additional information.
+        """
         # apply action
         vertices = action[:-4].reshape(2, -1)
         rgb = np.round(action[-4:-1] * 255).astype(int)
@@ -131,6 +160,12 @@ class DrawPolygonEnv(gym.Env):
         return self._get_obs(), reward, term, trunc, self._get_info()
 
     def render(self):
+        """
+        Renders the environment.
+        
+        Returns:
+            numpy.ndarray or None: The rendered image as a numpy array (if render_mode is "rgb_array"), or None.
+        """
         if self.screen is None:
             pygame.init()
             if self.render_mode == "human":
@@ -180,32 +215,75 @@ class DrawPolygonEnv(gym.Env):
             )
 
     def close(self):
+        """
+        Closes the environment.
+        """
         if self.screen is not None:
             pygame.display.quit()
             pygame.quit()
 
     def _get_obs(self):
+        """
+        Returns the current observation.
+        
+        Returns:
+            dict: A dictionary containing the reference image and the canvas.
+        """
         return {"reference": self._ref_img, "canvas": self._canvas}
 
     def _get_info(self):
+        """
+        Returns additional information about the environment.
+        
+        Returns:
+            dict: A dictionary containing the current step count.
+        """
         return {"step": self._step_cnt}
 
     def _load_dataset(self):
+        """
+        Loads the input images into memory.
+        
+        Returns:
+            Dataset: A PyTorch Dataset containing the input images.
+        """
         transforms = tsfm.Compose([tsfm.Resize(self.img_shape[1:])])
         return EnvironmentDataset(img_dir=self.img_path, transforms=transforms)
 
 
 class EnvironmentDataset(Dataset):
+    """
+    A PyTorch Dataset that loads input images from disk.
+    
+    Args:
+        img_dir (str): The path to the directory containing the input images.
+        transforms (torchvision.transforms.Compose): A list of transforms to apply to the input images (default: None).
+    """
     def __init__(self, img_dir, transforms=None):
         self.dir = img_dir
         self.transforms = transforms
         self.img_files = glob.glob(os.path.join(self.dir, "*.jpg"))
 
     def __getitem__(self, idx):
+        """
+        Returns the input image at the specified index.
+        
+        Args:
+            idx (int): The index of the input image to return.
+            
+        Returns:
+            torch.Tensor: The input image as a PyTorch tensor.
+        """
         image = read_image(self.img_files[idx])
         if self.transforms:
             image = self.transforms(image)
         return image
 
     def __len__(self):
+        """
+        Returns the number of input images in the dataset.
+        
+        Returns: 
+            int: The number of input images in the dataset.
+        """
         return len(self.img_files)
