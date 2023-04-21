@@ -1,17 +1,14 @@
 import numpy as np
 import skimage.draw as skdraw
-import glob
-import os
 import gym
 from gym import spaces
 import torch
 import torchvision.transforms as tsfm
-from torch.utils.data import Dataset
-from torchvision.io import read_image
 from torchmetrics.functional import structural_similarity_index_measure
 
 from porlygon.env.constants import VERTICES_PER_POLYGON, WINDOW_SIZE, IMG_SHAPE
 from porlygon.errors import MissingDependency
+from porlygon.env.polygon_env import dataset
 
 try:
     import pygame
@@ -248,42 +245,4 @@ class DrawPolygonEnv(gym.Env):
             Dataset: A PyTorch Dataset containing the input images.
         """
         transforms = tsfm.Compose([tsfm.Resize(self.img_shape[1:])])
-        return EnvironmentDataset(img_dir=self.img_path, transforms=transforms)
-
-
-class EnvironmentDataset(Dataset):
-    """
-    A PyTorch Dataset that loads input images from disk.
-    
-    Args:
-        img_dir (str): The path to the directory containing the input images.
-        transforms (torchvision.transforms.Compose): A list of transforms to apply to the input images (default: None).
-    """
-    def __init__(self, img_dir, transforms=None):
-        self.dir = img_dir
-        self.transforms = transforms
-        self.img_files = glob.glob(os.path.join(self.dir, "*.jpg"))
-
-    def __getitem__(self, idx):
-        """
-        Returns the input image at the specified index.
-        
-        Args:
-            idx (int): The index of the input image to return.
-            
-        Returns:
-            torch.Tensor: The input image as a PyTorch tensor.
-        """
-        image = read_image(self.img_files[idx])
-        if self.transforms:
-            image = self.transforms(image)
-        return image
-
-    def __len__(self):
-        """
-        Returns the number of input images in the dataset.
-        
-        Returns: 
-            int: The number of input images in the dataset.
-        """
-        return len(self.img_files)
+        return dataset.EnvironmentDataset(img_dir=self.img_path, transforms=transforms)
