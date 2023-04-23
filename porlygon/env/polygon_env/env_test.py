@@ -19,8 +19,8 @@ class TestDrawPolygonEnvStep(unittest.TestCase):
         action = np.array([0, 0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1])
         return action
 
-    def action_triangle(self):
-        action = np.array([0, 0, 0.5, 1, 0, 1, 0.5, 0, 1, 0, 0, 1])
+    def action_black_triangle(self):
+        action = np.array([0, 0, 0.5, 1, 0, 1, 0.5, 0, 0, 0, 0, 1])
         return action
 
     def action_random(self):
@@ -68,13 +68,13 @@ class TestDrawPolygonEnvStep(unittest.TestCase):
         # Check if the blending works as expected for a single point
         blended_point = new_canvas[:, 50, 50]
         expected_blended_color = ((orig_canvas[:, 50, 50] * (1 - action[-1])) + (action[-4:-1] * 255 * action[-1])).astype(int)
-        self.assertTrue(np.all(blended_point == expected_blended_color), 
+        self.assertTrue(np.all(blended_point == expected_blended_color),
                         f"Blending did not work as expected, expect {expected_blended_color}, get {blended_point}")
 
     def test_large_triangle_shape(self):
         self.env.reset()
 
-        action = self.action_triangle()
+        action = self.action_black_triangle()
         new_obs, _, _, _, _ = self.env.step(action)
         new_canvas = new_obs["canvas"]
 
@@ -82,7 +82,7 @@ class TestDrawPolygonEnvStep(unittest.TestCase):
         outside_point = self.point_at(0.75, 0.75)
 
         # Check if a point inside the triangle has a different color
-        self.assertFalse(np.all(new_canvas[:, inside_point[0], inside_point[1]] == 255), "Inside point color did not change")
+        self.assertFalse(np.any(new_canvas[:, inside_point[0], inside_point[1]] != 0), "Inside point color did not changed/wrong")
 
         # Check if a point outside the triangle still has the original color
         self.assertTrue(np.all(new_canvas[:, outside_point[0], outside_point[1]] == 255), "Outside point color changed")
