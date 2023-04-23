@@ -115,7 +115,9 @@ class DrawPolygonEnv(gym.Env):
         Executes one step in the environment.
         
         Args:
-            action (np.ndarray): The action to take.
+            action (np.ndarray): The action to take. The indicies are interpret in the
+            order of: all x positions (V in total) -> all y positions (V in total) ->
+            rgba (4 in total), where V is the number of vertices
             
         Returns:
             tuple: A tuple containing the new observation, the reward, the termination status, the truncation status, and additional information.
@@ -125,20 +127,14 @@ class DrawPolygonEnv(gym.Env):
         rgb = np.round(action[-4:-1] * 255).astype(int)
         alpha = action[-1]
         rr, cc = skdraw.polygon(
-            vertices[
-                0,
-            ]
-            * self.img_shape[1],
-            vertices[
-                1,
-            ]
-            * self.img_shape[2],
+            vertices[0] * (self.img_shape[1] - 1),
+            vertices[1] * (self.img_shape[2] - 1),
         )
+
         # alpha blending: new_color = (alpha)*(foreground_color) + (1 - alpha)*(background_color)
         # see https://graphics.fandom.com/wiki/Alpha_blending
-
         self._canvas[:, rr, cc] = (
-            self._canvas[:, rr, cc] * (1 - alpha) + np.expand_dims(rgb * alpha, 1)
+            self._canvas[:, rr, cc] * (1 - alpha) + np.expand_dims(rgb, 1) * alpha
         ).astype(int)
         # Calculate reward
         reward = structural_similarity_index_measure(
