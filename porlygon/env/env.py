@@ -10,7 +10,7 @@ from torchmetrics.functional import structural_similarity_index_measure
 
 from porlygon.env.constants import VERTICES_PER_POLYGON, WINDOW_SIZE, IMG_SHAPE
 from porlygon.errors import MissingDependency
-from porlygon.env.polygon_env import dataset
+from porlygon.env import dataset
 
 try:
     import pygame
