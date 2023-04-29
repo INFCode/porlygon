@@ -83,7 +83,8 @@ class TestDrawPolygonEnvStep(unittest.TestCase):
         ).astype(int)
         self.assertTrue(
             np.all(blended_point == expected_blended_color),
-            f"Blending did not work as expected, expect {expected_blended_color}, get {blended_point}",
+            f"Blending did not work as expected, "
+            "expect {expected_blended_color}, get {blended_point}",
         )
 
     def test_large_triangle_shape(self):
@@ -121,7 +122,7 @@ class TestDrawPolygonEnvStep(unittest.TestCase):
 
         _, _, done, _, _ = self.env.step(action)
         self.assertTrue(
-            done, "Environment should terminate" "after reaching the max_step"
+            done, "Environment should terminate after reaching the max_step"
         )
 
 
