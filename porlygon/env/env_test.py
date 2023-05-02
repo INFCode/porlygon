@@ -83,8 +83,8 @@ class TestDrawPolygonEnvStep(unittest.TestCase):
         ).astype(int)
         self.assertTrue(
             np.all(blended_point == expected_blended_color),
-            f"Blending did not work as expected, "
-            "expect {expected_blended_color}, get {blended_point}",
+            "Blending did not work as expected, "
+            f"expect {expected_blended_color}, get {blended_point}",
         )
 
     def test_large_triangle_shape(self):
