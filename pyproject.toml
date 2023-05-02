@@ -7,13 +7,13 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-torch = "^1.12.1"
+torch = "^2.0.0"
 gym = "^0.26.2"
-scikit-image = "^0.19.3"
 torchmetrics = "^0.10.0"
 # Pygame is required if you want to render the gym environment.
 pygame = {version = "^2.1.2", optional = true} 
 tianshou = "^0.4.10"
+torchvision = "^0.15.1"
 
 [tool.poetry.extras]
 render = ["pygame"]

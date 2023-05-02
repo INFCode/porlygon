@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, Dict, Tuple, Optional, Any
 
 import numpy as np
-import skimage.draw as skdraw
 import gym
 from gym import spaces
 import torch
@@ -254,12 +253,13 @@ class DrawPolygonEnv(gym.Env):
         """
         # apply action
         vertices = action[:-4].reshape(2, -1)
+        # scale the vertices to get the absolute position of vertices
+        vertices[0] *= self.img_shape[1] - 1
+        vertices[1] *= self.img_shape[2] - 1
         rgb = np.round(action[-4:-1] * 255).astype(int)
         alpha = action[-1]
-        rr, cc = skdraw.polygon(
-            vertices[0] * (self.img_shape[1] - 1),
-            vertices[1] * (self.img_shape[2] - 1),
-        )
+
+        rr, cc = self._polygon(vertices, self.img_shape[1:])
 
         # alpha blending: new_color = (alpha)*(foreground_color) + (1 - alpha)*(background_color)
         # see https://graphics.fandom.com/wiki/Alpha_blending
@@ -281,6 +281,40 @@ class DrawPolygonEnv(gym.Env):
         # This environment should never be truncated
         trunc = False
         return self._get_obs(), reward, term, trunc, self._get_info()
+
+    def _polygon(self, polygon, shape):
+        polygon = np.array(polygon, dtype=np.float32)
+
+        y, x = np.mgrid[: shape[0], : shape[1]]
+        positions = np.vstack((x.ravel(), y.ravel())).T
+
+        num_edges = polygon.shape[1]
+        crossing_numbers = np.zeros(positions.shape[0], dtype=np.int32)
+
+        for i in range(num_edges):
+            p1, p2 = polygon[:, i], polygon[:, (i + 1) % num_edges]
+            x_intersect = np.full_like(positions[:, 1], np.inf, dtype=np.float32)
+            non_horizontal_edge = p2[1] - p1[1] != 0
+            # This divide call is necessary as this can avoid divide-by-zero error for
+            # horizontal edges
+            np.divide(
+                (p2[0] - p1[0]) * (positions[:, 1] - p1[1]),
+                p2[1] - p1[1],
+                out=x_intersect,
+                where=non_horizontal_edge,
+            )
+            x_intersect[non_horizontal_edge] += p1[0]
+
+            intersects = ((p1[1] > positions[:, 1]) != (p2[1] > positions[:, 1])) & (
+                positions[:, 0] < x_intersect
+            )
+
+            crossing_numbers += intersects.astype(np.int32)
+
+        inside_polygon = crossing_numbers % 2 == 1
+        rr, cc = positions[inside_polygon][:, 1], positions[inside_polygon][:, 0]
+
+        return rr, cc
 
     def render(self):
         """
@@ -327,5 +361,5 @@ class DrawPolygonEnv(gym.Env):
         Returns:
             Dataset: A PyTorch Dataset containing the input images.
         """
-        transforms = tsfm.Compose([tsfm.Resize(self.img_shape[1:])])
+        transforms = tsfm.Compose([tsfm.Resize(self.img_shape[1:], antialias=None)])
         return dataset.EnvironmentDataset(img_dir=self.img_path, transforms=transforms)
