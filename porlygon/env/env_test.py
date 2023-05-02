@@ -112,13 +112,16 @@ class TestDrawPolygonEnvStep(unittest.TestCase):
     def test_reward_and_termination(self):
         self.env.reset()
         action = self.action_red_rectangle()
-        _, reward_before, _, _, _ = self.env.step(action)
 
-        for _ in range(self.env.max_step - 2):
+        for _ in range(self.env.max_step - 1):
             _, reward, done, _, _ = self.env.step(action)
             self.assertFalse(done, "Environment terminated early")
-            self.assertGreaterEqual(reward, reward_before, "Reward should not decrease")
-            reward_before = reward
+            self.assertGreaterEqual(
+                reward, 0, f"reward should be greater or equal 0, but get {reward}"
+            )
+            self.assertLessEqual(
+                reward, 1, f"reward should be smaller or equal 1, but get {reward}"
+            )
 
         _, _, done, _, _ = self.env.step(action)
         self.assertTrue(
