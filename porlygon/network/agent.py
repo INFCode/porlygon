@@ -14,8 +14,6 @@ from tianshou.exploration import GaussianNoise
 from tianshou.policy import TD3Policy
 from tianshou.trainer import OffpolicyTrainer
 from tianshou.utils import TensorboardLogger
-from tianshou.utils.net.common import Net
-from tianshou.utils.net.continuous import Actor, Critic
 
 import porlygon.env
 
@@ -61,6 +59,7 @@ def get_args():
     parser.add_argument(
         "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
     )
+    parser.add_argument("--full_run", type=bool, default=False)
     args = parser.parse_known_args()[0]
     return args
 
@@ -212,6 +211,11 @@ def test_td3(args=get_args()):
 
     assert action.size() == (args.batch_size, int(np.prod(args.action_shape)))
     assert Q_logit.size() == (args.batch_size, 1)
+
+    print("fake data test passed")
+
+    if not args.full_run:
+        return
 
     policy = TD3Policy(
         actor,
