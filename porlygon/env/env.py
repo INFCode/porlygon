@@ -53,7 +53,7 @@ class PygameRenderManager:
         self.render_mode = render_mode
         if self.render_mode == "human":
             pygame.display.init()
-            self._screen = pygame.display.set_mode(WINDOW_SIZE)
+            self._screen = pygame.display.set_mode(WINDOW_SIZE, flags = pygame.SCALED)
         else:  # mode == "rgb_array"
             self._screen = pygame.Surface(WINDOW_SIZE)
         self._clock = pygame.time.Clock()
