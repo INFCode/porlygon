@@ -124,7 +124,7 @@ class ActorNet(nn.Module):
 
     def __init__(
         self,
-        preprocess_net: nn.Module,
+        preprocess_net: ObsPreprocessNet,
         preprocess_net_output_dim: int,
         action_shape: Sequence[int],
         hidden_sizes: Sequence[int]=[16, 32],
@@ -156,9 +156,9 @@ class ActorNet(nn.Module):
 class CriticNet(nn.Module):
     def __init__(
         self,
-        act_preprocess_net: nn.Module,
+        act_preprocess_net: ActPreprocessNet,
         act_preprocess_net_output_dim: int,
-        obs_preprocess_net: nn.Module,
+        obs_preprocess_net: ObsPreprocessNet,
         obs_preprocess_net_output_dim: int,
         hidden_sizes:Sequence[int]=[16, 32],
         device:Device="cpu",
@@ -176,7 +176,7 @@ class CriticNet(nn.Module):
         obs:ObsT,
         act:ActT,
         info:Dict={},
-    ):
+    ) -> torch.Tensor:
         """Mapping: (s, a) -> logits -> Q(s, a)."""
         # info is not needed
         del info
@@ -186,42 +186,3 @@ class CriticNet(nn.Module):
         logits = self.final_mlp(logits)
         return logits
 
-
-if __name__ == "__main__":
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    print(f"{device=}")
-
-    obs_shape = (3, 128, 128)
-    obs_intermed = 64
-
-    act_shape = (12,)
-    act_intermed = 16
-
-    obs_pre = ObsPreprocessNet(
-        single_obs_shape=obs_shape, intermed_rep_size=obs_intermed, device=device
-    ).to(device)
-    act_pre = ActPreprocessNet(
-        single_act_shape=act_shape, intermed_rep_size=act_intermed, device=device
-    ).to(device)
-
-    actor = ActorNet(
-        obs_pre, preprocess_net_output_dim=obs_intermed, action_shape=act_shape
-    ).to(device)
-    critic = CriticNet(
-        act_preprocess_net=act_pre,
-        act_preprocess_net_output_dim=act_intermed,
-        obs_preprocess_net=obs_pre,
-        obs_preprocess_net_output_dim=obs_intermed,
-        device=device,
-    ).to(device)
-
-    obs: ObsT = {
-        "reference": np.random.rand(16, 3, 128, 128),
-        "canvas": np.random.rand(16, 3, 128, 128),
-    }
-
-    action, _ = actor.forward(obs)
-    Q_logit = critic.forward(obs, action)
-
-    print(f"{action.size()=}")
-    print(f"{Q_logit.size()=}")
