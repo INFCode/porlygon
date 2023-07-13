@@ -18,7 +18,7 @@ from tianshou.utils import TensorboardLogger
 import porlygon.env
 
 # from td3_network import ConvNet
-from td3_network import ObsPreprocessNet, ActPreprocessNet, ActorNet, CriticNet
+from td3_modules import ObsPreprocessNet, ActPreprocessNet, ActorNet, CriticNet
 
 
 def get_args():
@@ -59,7 +59,7 @@ def get_args():
     parser.add_argument(
         "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
     )
-    parser.add_argument("--full_run", type=bool, default=False)
+    parser.add_argument("--full_run", type=bool, default=True)
     args = parser.parse_known_args()[0]
     return args
 
@@ -217,6 +217,7 @@ def test_td3(args=get_args()):
     if not args.full_run:
         return
 
+    print("Building policy and training Environments...")
     policy = TD3Policy(
         actor,
         actor_optim,
@@ -269,6 +270,7 @@ def test_td3(args=get_args()):
         save_best_fn=save_best_fn,
         logger=logger,
     )
+    print("Start training...")
     for epoch, epoch_stat, info in trainer:
         print(f"Epoch: {epoch}")
         print(epoch_stat)
